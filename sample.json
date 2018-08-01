@@ -1,0 +1,44 @@
+[
+    {
+        "path": "my.cpp",
+        "encoding": "euckr",
+        "change": [
+            {
+                "find": "sdkKey = TEXT(\"[[tochange]]\");",
+                "changeto": {
+                    "step1": "1234",
+                    "step2": "1234",
+                    "step3": "4567"
+                }
+            }
+        ]
+    },
+    {
+        "path": "Config/ServerList.ini",
+        "encoding": "utf16bom",
+        "change": [
+            {
+                "find": "+AuthConnectionInfo=(IPAddr=\"[[tochange]]\",Port=10033,ServerName=\"qqq\",ConnectionPurpose=qwe)",
+                "changeto": {
+                    "step1": "1.2.3.4",
+                    "step2": "1.0.0.1",
+                    "step3": "128.81.123.123"
+                }
+            }
+        ]
+    },
+    {
+        "path": "Android/res/values/PlatformConfig.xml",
+        "encoding": "utf8",
+        "change": [
+            {
+                "find": "<string name=\"service_key\">[[tochange]]</string>",
+                "changeto": {
+                    "step1": "jof4002",
+                    "step2": "jof4003",
+                    "step3": "jof4004"
+                }
+            }
+        ]
+    }
+]
