@@ -13,11 +13,6 @@ import (
 	"golang.org/x/text/transform"
 )
 
-// var (
-// 	euckrDec = korean.EUCKR.NewDecoder()
-// 	utf16Dec = unicode.U
-// )
-
 // LineConfig root of all config
 type LineConfig []LineConfigElement
 
@@ -48,7 +43,6 @@ func readFile(path, encoding string) ([]string, error) {
 		euckrDec := korean.EUCKR.NewDecoder()
 		got, _, err := transform.Bytes(euckrDec, data)
 		if err != nil {
-			fmt.Println(err.Error())
 			return nil, err
 		}
 		lines := strings.Split(string(got), "\n")
@@ -57,7 +51,6 @@ func readFile(path, encoding string) ([]string, error) {
 		utfDec := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM).NewDecoder()
 		got, _, err := transform.Bytes(utfDec, data)
 		if err != nil {
-			fmt.Println(err.Error())
 			return nil, err
 		}
 		lines := strings.Split(string(got), "\n")
@@ -70,34 +63,40 @@ func readFile(path, encoding string) ([]string, error) {
 	return lines, nil
 }
 
-func writeFile(lines []string, path, encoding string) {
-	//fmt.Println("write : " + path)
-	sep := "\n"
-	onestring := strings.Join(lines, sep)
+func writeFile(lines []string, path, encoding string) error {
+	onestring := strings.Join(lines, "\n")
 	if encoding == "euckr" {
 		euckrEnc := korean.EUCKR.NewEncoder()
 		got, _, err := transform.Bytes(euckrEnc, []byte(onestring))
 		if err != nil {
-			fmt.Println(err.Error())
-			return
+			return err
 		}
-		ioutil.WriteFile(path, []byte(got), 0644)
-		return
+		err = ioutil.WriteFile(path, []byte(got), 0644)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 	if encoding == "utf16bom" {
 		utfEnc := unicode.UTF16(unicode.LittleEndian, unicode.UseBOM).NewEncoder()
 		got, _, err := transform.Bytes(utfEnc, []byte(onestring))
 		if err != nil {
-			fmt.Println(err.Error())
-			return
+			return err
 		}
-		ioutil.WriteFile(path, []byte(got), 0644)
-		return
+		err = ioutil.WriteFile(path, []byte(got), 0644)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
-	ioutil.WriteFile(path, []byte(onestring), 0644)
+	err := ioutil.WriteFile(path, []byte(onestring), 0644)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func processItem(buildstage string, lc LineConfigElement, basePath string) {
+func processItem(buildstage string, lc LineConfigElement, basePath string) error {
 	// fmt.Println("-------------------------")
 	// fmt.Println("Path : " + basePath + lc.Path)
 	// fmt.Println("buildstage : " + buildstage)
@@ -107,49 +106,46 @@ func processItem(buildstage string, lc LineConfigElement, basePath string) {
 	for i, cc := range lc.Change {
 		arr := strings.Split(cc.Find, "[[tochange]]")
 		if len(arr) != 2 {
-			fmt.Println("invalid config Find format :" + cc.Find + " in " + lc.Path)
-			return
+			return fmt.Errorf("invalid config Find format : %s in %s", cc.Find, lc.Path)
+
 		}
 		lc.Change[i].findPrefix = arr[0]
 		lc.Change[i].findPostfix = arr[1]
 	}
 
+	// read source file
 	fileLines, err := readFile(basePath+lc.Path, lc.Encoding)
 	if err != nil {
-		fmt.Println(err.Error())
-		return
+		return err
 	}
 
 	for _, cc := range lc.Change {
-		//fmt.Println(cc.Description)
 
+		// process line by line
 		for i, text := range fileLines {
-			//fmt.Printf("%d %s", i, text)
-			// for k, v := range cc.Changeto {
-			// 	fmt.Println(k + " - " + v)
-			// }
+			// if line doesn't have findPrefix continue
 			pre := strings.Index(text, cc.findPrefix)
 			if pre == -1 {
 				continue
 			}
+			// if findPostfix exists and [line after findPrefix] doesn't have findPostfix continue
 			if len(cc.findPostfix) > 0 && strings.Index(text[pre:], cc.findPostfix) == -1 {
 				continue
 			}
 
 			//fmt.Println("Found line : " + text)
 			first := text[:pre+len(cc.findPrefix)]
-			//fmt.Println("first token : " + first)
 			remain := text[pre+len(cc.findPrefix):]
 			second := ""
 			if len(cc.findPostfix) > 0 {
 				post := strings.Index(remain, cc.findPostfix)
 				if post != -1 {
 					second = remain[post:]
-					//fmt.Println("second token : " + second)
 				}
 			}
 
 			var replace string
+			// if config has stage text, make first + val + second, else make first + second
 			if val, ok := cc.Changeto[buildstage]; ok {
 				replace = first + val + second
 			} else {
@@ -159,8 +155,13 @@ func processItem(buildstage string, lc LineConfigElement, basePath string) {
 		}
 	}
 
-	//writeFile(fileLines, basePath+lc.Path+".conv", lc.Encoding)
-	writeFile(fileLines, basePath+lc.Path, lc.Encoding)
+	// write back to source file
+	//err = writeFile(fileLines, basePath+lc.Path+".conv", lc.Encoding)
+	err = writeFile(fileLines, basePath+lc.Path, lc.Encoding)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func main() {
@@ -168,25 +169,32 @@ func main() {
 		fmt.Println("LineChanger configjson buildstage (basepath)")
 		return
 	}
-	configjson := os.Args[1]
-	buildstage := os.Args[2]
+	configjson := os.Args[1] // config path
+	buildstage := os.Args[2] // build stage to apply
 	basePath := "./"
 	if len(os.Args) >= 4 {
-		basePath = os.Args[3]
+		basePath = os.Args[3] // base path if specified
 	}
 
+	// read config json and unmarshall
 	lineJSON, err := ioutil.ReadFile(configjson)
 	if err != nil {
 		fmt.Println(err.Error())
-		return
+		os.Exit(1)
 	}
 	var lines LineConfig
 	err = json.Unmarshal([]byte(lineJSON), &lines)
 	if err != nil {
 		fmt.Println(err.Error())
-		return
+		os.Exit(1)
 	}
+
+	// process config
 	for _, line := range lines {
-		processItem(buildstage, line, basePath)
+		err := processItem(buildstage, line, basePath)
+		if err != nil {
+			fmt.Println(err.Error())
+			os.Exit(1)
+		}
 	}
 }
