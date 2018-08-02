@@ -65,6 +65,12 @@ func readFile(path, encoding string) ([]string, error) {
 
 func writeFile(lines []string, path, encoding string) error {
 	onestring := strings.Join(lines, "\n")
+	// if string has \r normalize \r\n
+	if strings.Index(onestring, "\r") != -1 {
+		onestring = strings.Replace(onestring, "\r", "", -1)
+		onestring = strings.Replace(onestring, "\n", "\r\n", -1)
+	}
+
 	if encoding == "euckr" {
 		euckrEnc := korean.EUCKR.NewEncoder()
 		got, _, err := transform.Bytes(euckrEnc, []byte(onestring))
